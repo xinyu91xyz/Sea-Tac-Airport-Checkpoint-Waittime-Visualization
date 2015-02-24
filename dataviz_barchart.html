@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <script src="http://d3js.org/d3.v3.min.js"></script>
+        <style type="text/css">
+
+          body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            margin: auto;
+            position: relative;
+            width: 960px;
+            background-color: #4ba5e1;
+          }
+
+          text {
+            font: 10px sans-serif;
+          }
+
+          .axis path,
+          .axis line {
+            fill: none;
+            stroke: #000;
+            shape-rendering: crispEdges;
+          }
+
+          .tooltip2 {
+            position: absolute;
+            width: 160px;
+            height: auto;
+            padding: 10px;
+            background-color: white;
+            pointer-events: none;
+          }
+
+          .tooltip2.hidden {
+            display: none;
+          }
+
+          .tooltip2 p {
+            margin: 0;
+            font-family: sans-serif;
+            font-size: 16px;
+            line-height: 20px;
+          }
+
+          .tooltip2-left:before {
+            content: "";
+            position:absolute;
+            bottom: 64px;
+            right: -8px;
+            border-left: 8px solid white;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+            border-right: 0;
+          }
+
+          .tooltip2-right:before {
+            content: "";
+            position:absolute;
+            bottom: 64px;
+            left: -8px;
+            border-right: 8px solid white;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+            border-left: 0;
+          }
+
+          form {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+          }
+
+        </style>
+
+        <form>
+          <label><input id="grouped1" type="radio" name="mode" value="grouped"> Grouped</label>
+          <label><input id="stacked1" type="radio" name="mode" value="stacked" checked> Stacked</label>
+        </form>
+
+    </head>
+
+    <body>
+
+        <div class="tooltip2 hidden">
+          <p><strong>Checkpoint: <span class="checkPt">100</span></strong></p>
+          <p>Estimated Wait Time</p>
+          <p><strong><span class="value">100</span></strong> min(s)</p>
+        </div>
+
+        <script type="text/javascript">
+
+        var n = 5, // number of layers
+            m = 12; // number of samples per layer
+
+//size of the 'box'
+        var margin = {top: 40, right: 80, bottom: 100, left: 100},
+            width = 1000 - margin.left - margin.right,
+            height = 700 - margin.top - margin.bottom;
+
+//create SVG container and append a graph to SVG container with transformed coordinates
+        var svg2 = d3.select("body").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        svg2.append("text")
+        .attr("x", (width / 2))             
+        .attr("y", height + (margin.top))
+        .attr("text-anchor", "middle")  
+        .style("font-size", "16px") 
+        .style("font-weight", "bold") 
+        .text("Waiting time at each checkpoint at different time of a day");
+
+        d3.csv("timeSheet.csv", function(data) {
+
+            var headers = ["1","2","3","4","5"];
+
+            var layers = d3.layout.stack()(headers.map(function(timeRange) {
+              return data.map(function(d) {
+                return {x: d.Checkpoint, y: +d[timeRange], z: +timeRange};
+              });
+            }));
+
+            var yGroupMax = d3.max(layers, function(layer) { return d3.max(layer, function(d) { return d.y; }); }),
+                yStackMax = d3.max(layers, function(layer) { return d3.max(layer, function(d) { return d.y0 + d.y; }); });
+
+    // create numbers for x axis -- ordinal scale
+            var x = d3.scale.ordinal()
+                .domain(d3.range(m))
+                .rangeRoundBands([0, width], .3);
+
+    // set x axis -- ticks
+            var xAxis = d3.svg.axis()
+                .scale(x)
+                .tickSize(0)
+                .tickPadding(6)
+                .orient("bottom");
+
+    // create numbers for y axis -- linear scale
+            var y = d3.scale.linear()
+                .domain([0, yStackMax])
+                .range([height, 0]);
+
+    // set color ranges/scales
+            var color = d3.scale.ordinal()
+                // .domain([0, n-1])
+                .range(["#d0e68f","#543c4d","#b5ebd2","#408176","#fff3c7"]);
+
+    // create layers, append to svg, and fill layers with scaled colors
+            var layer = svg2.selectAll(".layer")
+                .data(layers)
+                .enter().append("g")
+                .attr("class", "layer")
+                .style("fill", function(d, i) { return color(i); });
+
+            var legend = 
+                  svg2.selectAll(".legend")
+                     .data(color.domain().slice().reverse())
+                     .enter().append("g")
+                     .attr("class", "legend")
+                     .attr("transform", function(d, i) {return "translate(-10," + i * 20 + ")"; });
+
+            legend.append("rect")
+                .attr("x", 0)
+                .attr("width", 18)
+                .attr("height", 18)
+                .style("fill", color);
+
+            legend.selectAll("text .legend")
+                .data([headers.slice().reverse()])
+                .enter().append("text")
+                  .attr("x", -10)
+                  .attr("y", 9)
+                  .attr("dy", ".35em")
+                  .style("text-anchor", "end")
+                  .text(function(d,i,j) {return "Checkpoint: " + d[j]; });
+
+    //
+    // create bars for barchart, x and y define the position, width and height define the size
+            var rect = 
+                layer.selectAll("rect")
+                .data(function(d) { return d; })
+                .enter().append("rect")
+                .attr("x", function(d) { return x(d.x); })
+                .attr("y", height)
+                .attr("width", x.rangeBand())
+                .attr("height", 0)
+                .on("mouseover", function(d) {
+
+                    var xPosition;
+                    var yPosition;
+
+                    var f = document.getElementById('grouped1')
+
+                    if (d3.select(this).attr("x") < 460) {
+                      
+                        if (f.checked) { 
+                            xPosition = parseFloat(d3.select(this).attr("x")) + 113;
+                            yPosition = parseFloat(d3.select(this).attr("y")) + 40;
+                        } 
+                        else { 
+                            xPosition = parseFloat(d3.select(this).attr("x")) + 146;
+                            yPosition = parseFloat(d3.select(this).attr("y")) + 40;
+                        }
+                        d3.select(".tooltip2").classed("tooltip2-left", false).classed("tooltip2-right", true);
+
+                    } else {
+                        if (f.checked) { 
+                            xPosition = parseFloat(d3.select(this).attr("x")) - 82;
+                            yPosition = parseFloat(d3.select(this).attr("y")) + 40;
+                        } 
+                        else { 
+                            xPosition = parseFloat(d3.select(this).attr("x")) - 80;
+                            yPosition = parseFloat(d3.select(this).attr("y")) + 40;
+                        }
+                      d3.select(".tooltip2").classed("tooltip2-left", true).classed("tooltip2-right", false);;
+                    }
+                    
+                    /* Update the tooltip position and value */
+                    d3.select(".tooltip2")
+                      .style("left", xPosition + "px")
+                      .style("top", yPosition + "px")
+                      .select(".value")
+                      .text(d.y);
+
+                    d3.selectAll(".tooltip2")
+                      .style("left", xPosition + "px")
+                      .style("top", yPosition + "px")
+                      .select(".checkPt")
+                      .text(d.z);
+
+                    /* Show the tooltip */
+                    d3.select(".tooltip2").classed("hidden", false);
+                
+                })
+
+                .on("mouseout", function() {
+                  /* Hide the tooltip */
+                  d3.select(".tooltip2").classed("hidden", true);      
+                });
+
+    //
+    // bar transition -- when stacked bars show up
+            //y.domain([0,yStackMax]);
+            rect.transition()
+                .delay(function(d, i) { return i * 50; })
+                .attr("y", function(d) { return y(d.y0 + d.y); })
+                .attr("height", function(d) { return y(d.y0) - y(d.y0 + d.y); });
+
+            svg2.append("g")
+                .attr("class", "x axis")
+                .attr("transform", "translate(0," + height + ")")
+                .call(xAxis);
+
+            d3.selectAll("input").on("change", change);
+
+            function change() {
+              //clearTimeout(timeout);
+              if (this.value === "grouped") transitionGrouped();
+              else transitionStacked();
+            }
+
+            function transitionGrouped() {
+              y.domain([0, yGroupMax]);
+
+              rect.transition()
+                  .duration(500)
+                  .delay(function(d, i) { return i * 50; })
+                  .attr("x", function(d, i, j) { return x(d.x) + x.rangeBand() / n * j; })
+                  .attr("width", x.rangeBand() / n)
+                .transition()
+                  .attr("y", function(d) { return y(d.y); })
+                  .attr("height", function(d) { return height - y(d.y); });
+            }
+
+            function transitionStacked() {
+              y.domain([0, yStackMax]);
+
+              rect.transition()
+                  .duration(500)
+                  .delay(function(d, i) { return i * 50; })
+                  .attr("y", function(d) { return y(d.y0 + d.y); })
+                  .attr("height", function(d) { return y(d.y0) - y(d.y0 + d.y); })
+                .transition()
+                  .attr("x", function(d) { return x(d.x); })
+                  .attr("width", x.rangeBand());
+            }
+
+        });
+
+        </script>
+    </body>
+</html>
